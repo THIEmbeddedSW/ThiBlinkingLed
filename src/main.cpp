@@ -41,6 +41,28 @@ ISR (PCINT1_vect)
     }
 }
 
+// // timer1 compare interrupt service routine
+ISR(TIMER1_COMPA_vect)
+{
+    // turn the LED on (HIGH is the voltage level), put info on LCD
+    if (digitalRead(13) == LOW) // LED is off
+    {
+        digitalWrite(13, HIGH);
+	    lcd.setCursor(0,1);
+	    lcd.print("On ");
+    } 
+    else // LED is on
+    {
+        if (digitalRead(A0) == HIGH) 
+        {
+            digitalWrite(13, LOW);
+            lcd.setCursor(0,1);
+            lcd.print("Off");
+        }
+    }
+    Serial.println("digital input: " + String(digitalRead(A0)));
+}
+
 
 void setup()
 {
@@ -52,10 +74,19 @@ void setup()
     PCMSK1 = (1<<PCINT8); // A0 = PCINT8
     EICRA = (1<<ISC11);   // falling egde only
 
+	// configure timer1 interrupt to 1s
+	TCCR1A = 0;
+	TCCR1B = 0;
+	TCNT1  = 0;
+	OCR1A = 62500;            // compare match register to trigger every 1s
+	TCCR1B |= (1 << WGM12);   // CTC mode
+	TCCR1B |= (1 << CS12) | (0 << CS11) | (0 >> CS10); //Prescale auf 256 -> frequency 16MHz/256 = 62500 Hz
+	TIMSK1 |= (1 << OCIE1A);  // enable timer compare interrupt
+
     Serial.begin(115200); // we need the serial line for debugging; set the baudrate as parameter
 
-   renderer.begin();
-   lcd.clear();
+    renderer.begin();
+    lcd.clear();
 
     // Some hello text
     lcd.setCursor(0,0);
@@ -64,23 +95,5 @@ void setup()
 
 void loop()
 {
-    // turn the LED on (HIGH is the voltage level), put info on LCD
-    digitalWrite(13, HIGH);
-	lcd.setCursor(0,1);
-	lcd.print("On ");
-
-    // wait for 1s
-    delay(1000);
-
-    // turn LED off, if switch is not pressed (i.e. if pin is high), put info on LCD
-    if (digitalRead(A0) == HIGH) 
-    {
-        digitalWrite(13, LOW);
-        lcd.setCursor(0,1);
-	    lcd.print("Off");
-    }
-    Serial.println("digital input: " + String(digitalRead(A0)));
-
-    // wait for 1s, 
-    delay(1000);
+    // nothing to do; everything happens in the interrupts.
 }
