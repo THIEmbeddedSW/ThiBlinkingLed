@@ -14,26 +14,28 @@ LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
 CharacterDisplayRenderer renderer(new LiquidCrystalAdapter(&lcd, 16, 2), 16, 2);
 LcdMenu menu(renderer);
 
-volatile u8 button_counter = 0;
-volatile int lastValidState = HIGH;
+// data for debouncing
+volatile u16 lastValidState = LOW;
 volatile unsigned long lastInterrupt = 0;
 const unsigned long debounceTime = 20;
+
+// counters and bools for interrupt event handling
+volatile bool tick = false;
+u16 system_counter = 0;
+volatile bool button_clicked = false;
+u8 button_counter = 0;
 
 // PCINT1_vect: interrupt vector for PCINT[14:8]
 ISR (PCINT1_vect)
 {
-    if((millis() - lastInterrupt) > debounceTime)
+    if((millis() - lastInterrupt) > debounceTime) // debounce time elapsed
     {           
-        if( (digitalRead(A0) == LOW) && (lastValidState == HIGH) )
+        if( (digitalRead(A0) == LOW) && (lastValidState == HIGH) ) //we come from HIGH
         {
-            digitalWrite(13, HIGH); // switch LCD on
-            lcd.setCursor(0,1);
-	        lcd.print("On ");
             lastValidState = LOW;
-            button_counter++;
-            Serial.println(String(button_counter) + " Interrupts on pin A0!");
+            button_clicked = true;
         }
-        else 
+        else
         {
             lastValidState = HIGH;
         }
@@ -41,26 +43,10 @@ ISR (PCINT1_vect)
     }
 }
 
-// // timer1 compare interrupt service routine
+// timer1 compare interrupt service routine
 ISR(TIMER1_COMPA_vect)
 {
-    // turn the LED on (HIGH is the voltage level), put info on LCD
-    if (digitalRead(13) == LOW) // LED is off
-    {
-        digitalWrite(13, HIGH);
-	    lcd.setCursor(0,1);
-	    lcd.print("On ");
-    } 
-    else // LED is on
-    {
-        if (digitalRead(A0) == HIGH) 
-        {
-            digitalWrite(13, LOW);
-            lcd.setCursor(0,1);
-            lcd.print("Off");
-        }
-    }
-    Serial.println("digital input: " + String(digitalRead(A0)));
+    tick = true;
 }
 
 
@@ -74,11 +60,11 @@ void setup()
     PCMSK1 = (1<<PCINT8); // A0 = PCINT8
     EICRA = (1<<ISC11);   // falling egde only
 
-	// configure timer1 interrupt to 1s
+	// configure timer1 interrupt to 10ms
 	TCCR1A = 0;
 	TCCR1B = 0;
 	TCNT1  = 0;
-	OCR1A = 62500;            // compare match register to trigger every 1s
+	OCR1A = 625;              // compare match register to trigger every 10ms
 	TCCR1B |= (1 << WGM12);   // CTC mode
 	TCCR1B |= (1 << CS12) | (0 << CS11) | (0 >> CS10); //Prescale auf 256 -> frequency 16MHz/256 = 62500 Hz
 	TIMSK1 |= (1 << OCIE1A);  // enable timer compare interrupt
@@ -95,5 +81,45 @@ void setup()
 
 void loop()
 {
-    // nothing to do; everything happens in the interrupts.
+    if (tick) // 10ms timer interrupt occured
+    {
+        system_counter++;
+
+        // check for clicked button
+        if (button_clicked)
+        {
+            digitalWrite(13, HIGH); // switch LED on
+            lcd.setCursor(0,1);
+	        lcd.print("On ");
+            lastValidState = LOW;
+            button_counter++;
+            Serial.println(String(button_counter) + " Interrupts on pin A0!");
+
+            button_clicked = false;
+        }
+
+        if (system_counter % 100 == 0) // 1s elapsed (100x10ms)
+        {
+            // switch LED, put info on LCD
+            if (digitalRead(13) == LOW) // LED is off
+            {
+                digitalWrite(13, HIGH);
+                lcd.setCursor(0,1);
+                lcd.print("On ");
+            } 
+            else // LED is on
+            {
+                if (digitalRead(A0) == HIGH) // if button is not pressed
+                {
+                    digitalWrite(13, LOW);
+                    lcd.setCursor(0,1);
+                    lcd.print("Off");
+                }
+            }
+            Serial.println("digital input: " + String(digitalRead(A0)));
+
+            system_counter = 0;  // reset
+        }
+        tick = false; //reset for next tick.
+    }
 }
