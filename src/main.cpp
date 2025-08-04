@@ -14,13 +14,31 @@ LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
 CharacterDisplayRenderer renderer(new LiquidCrystalAdapter(&lcd, 16, 2), 16, 2);
 LcdMenu menu(renderer);
 
+volatile u8 button_counter = 0;
+volatile int lastValidState = HIGH;
+volatile unsigned long lastInterrupt = 0;
+const unsigned long debounceTime = 20;
+
 // PCINT1_vect: interrupt vector for PCINT[14:8]
 ISR (PCINT1_vect)
 {
-    digitalWrite(13, HIGH); // switch LED on
-    lcd.setCursor(0,1);
-	lcd.print("On ");
-    Serial.println("Interrupt on pin A0!");
+    if((millis() - lastInterrupt) > debounceTime)
+    {           
+        if( (digitalRead(A0) == LOW) && (lastValidState == HIGH) )
+        {
+            digitalWrite(13, HIGH); // switch LCD on
+            lcd.setCursor(0,1);
+	        lcd.print("On ");
+            lastValidState = LOW;
+            button_counter++;
+            Serial.println(String(button_counter) + " Interrupts on pin A0!");
+        }
+        else 
+        {
+            lastValidState = HIGH;
+        }
+        lastInterrupt = millis();
+    }
 }
 
 
